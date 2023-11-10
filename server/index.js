@@ -1,44 +1,57 @@
 const express = require("express");
-const app = express();
 const cors = require("cors");
+const { secp256k1 } = require("ethereum-cryptography/secp256k1");
+const {
+  createAccount,
+  setAccountBalance,
+  verifySignature,
+} = require("./src/accountController");
+
+const app = express();
 const port = 3042;
 
 app.use(cors());
 app.use(express.json());
 
-const balances = {
-  "0x1": 100,
-  "0x2": 50,
-  "0x3": 75,
-};
+const account1 = createAccount();
+const account2 = createAccount();
+const account3 = createAccount();
 
-app.get("/balance/:address", (req, res) => {
-  const { address } = req.params;
-  const balance = balances[address] || 0;
-  res.send({ balance });
+const accounts = [account1, account2, account3];
+
+app.get("/accounts", (_, res) => {
+  res.send({ accounts });
 });
 
-app.post("/send", (req, res) => {
-  const { sender, recipient, amount } = req.body;
+app.post("/transfer", (req, res) => {
+  const { sender, recipient, amount, signature } = req.body;
 
-  setInitialBalance(sender);
-  setInitialBalance(recipient);
+  const senderAccount = accounts.find((account) => account.address === sender);
+  const recipientAccount = accounts.find(
+    (account) => account.address === recipient
+  );
 
-  if (balances[sender] < amount) {
+  const isVarified = verifySignature(
+    senderAccount,
+    recipient,
+    amount,
+    signature
+  );
+
+  if (!isVarified) {
+    res.status(400).send({ message: "Not from sender!" });
+  } else if (senderAccount.balance < amount) {
     res.status(400).send({ message: "Not enough funds!" });
   } else {
-    balances[sender] -= amount;
-    balances[recipient] += amount;
-    res.send({ balance: balances[sender] });
+    setAccountBalance(senderAccount, -amount);
+    setAccountBalance(recipientAccount, amount);
+
+    res.send({
+      balance: senderAccount.balance,
+    });
   }
 });
 
 app.listen(port, () => {
   console.log(`Listening on port ${port}!`);
 });
-
-function setInitialBalance(address) {
-  if (!balances[address]) {
-    balances[address] = 0;
-  }
-}
